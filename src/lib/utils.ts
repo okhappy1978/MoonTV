@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any,no-console */
-
+import he from 'he';
 import Hls from 'hls.js';
 
 /**
@@ -8,8 +8,24 @@ import Hls from 'hls.js';
 export function getImageProxyUrl(): string | null {
   if (typeof window === 'undefined') return null;
 
-  const imageProxyUrl = localStorage.getItem('imageProxyUrl');
-  return imageProxyUrl && imageProxyUrl.trim() ? imageProxyUrl.trim() : null;
+  // 本地未开启图片代理，则不使用代理
+  const enableImageProxy = localStorage.getItem('enableImageProxy');
+  if (enableImageProxy !== null) {
+    if (!JSON.parse(enableImageProxy) as boolean) {
+      return null;
+    }
+  }
+
+  const localImageProxy = localStorage.getItem('imageProxyUrl');
+  if (localImageProxy != null) {
+    return localImageProxy.trim() ? localImageProxy.trim() : null;
+  }
+
+  // 如果未设置，则使用全局对象
+  const serverImageProxy = (window as any).RUNTIME_CONFIG?.IMAGE_PROXY;
+  return serverImageProxy && serverImageProxy.trim()
+    ? serverImageProxy.trim()
+    : null;
 }
 
 /**
@@ -21,21 +37,7 @@ export function processImageUrl(originalUrl: string): string {
   const proxyUrl = getImageProxyUrl();
   if (!proxyUrl) return originalUrl;
 
-  // 如果原始 URL 已经是代理 URL，则不再处理
-  if (originalUrl.includes(proxyUrl)) return originalUrl;
-
   return `${proxyUrl}${encodeURIComponent(originalUrl)}`;
-}
-
-export function cleanHtmlTags(text: string): string {
-  if (!text) return '';
-  return text
-    .replace(/<[^>]+>/g, '\n') // 将 HTML 标签替换为换行
-    .replace(/\n+/g, '\n') // 将多个连续换行合并为一个
-    .replace(/[ \t]+/g, ' ') // 将多个连续空格和制表符合并为一个空格，但保留换行符
-    .replace(/^\n+|\n+$/g, '') // 去掉首尾换行
-    .replace(/&nbsp;/g, ' ') // 将 &nbsp; 替换为空格
-    .trim(); // 去掉首尾空格
 }
 
 /**
@@ -193,4 +195,18 @@ export async function getVideoResolutionFromM3u8(m3u8Url: string): Promise<{
       }`
     );
   }
+}
+
+export function cleanHtmlTags(text: string): string {
+  if (!text) return '';
+
+  const cleanedText = text
+    .replace(/<[^>]+>/g, '\n') // 将 HTML 标签替换为换行
+    .replace(/\n+/g, '\n') // 将多个连续换行合并为一个
+    .replace(/[ \t]+/g, ' ') // 将多个连续空格和制表符合并为一个空格，但保留换行符
+    .replace(/^\n+|\n+$/g, '') // 去掉首尾换行
+    .trim(); // 去掉首尾空格
+
+  // 使用 he 库解码 HTML 实体
+  return he.decode(cleanedText);
 }
